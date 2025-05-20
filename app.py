@@ -1,4 +1,3 @@
-
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import openai
@@ -7,12 +6,12 @@ import uuid
 import json
 import re
 from google.cloud import texttospeech
+from datetime import datetime
 
 app = Flask(__name__)
 CORS(app)
 
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "lumina-voice-ai.json"
 tts_client = texttospeech.TextToSpeechClient()
 
@@ -29,14 +28,6 @@ def save_memory(data):
     with open(MEMORY_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
-def check_missing_memory(memory):
-    missing = []
-    if not memory["personal"].get("name"): missing.append("name")
-    if not memory["business"].get("goal"): missing.append("goal")
-    if not memory["preferences"].get("voice_style"): missing.append("voice_style")
-    return missing
-
-
 def update_timeline_from_text(text, memory):
     keywords = ["mark today as", "record", "log", "note", "milestone"]
     if any(k in text.lower() for k in keywords):
@@ -48,7 +39,6 @@ def update_timeline_from_text(text, memory):
             timeline.append({"date": today, "event": event})
             memory["timeline"] = timeline
     return memory
-
 
 def update_memory_from_text(text, memory):
     if "my name is" in text.lower():
@@ -79,22 +69,26 @@ def ask():
     try:
         memory = load_memory()
         memory = update_memory_from_text(question, memory)
+        memory = update_timeline_from_text(question, memory)
         save_memory(memory)
 
-
-        # Detect sales intent and suggest products
+        # Detect sales intent
         sales_trigger = ""
-        if any(k in question.lower() for k in ["start a business", "build a brand", "get more clients", "create content", "automate", "get leads"]):
+        if any(k in question.lower() for k in [
+            "start a business", "build a brand", "get more clients", 
+            "create content", "automate", "get leads"
+        ]):
             sales_trigger = "spark"
-        elif any(k in question.lower() for k in ["build my business fast", "7 day program", "guided build", "accountability", "how do I launch"]):
+        elif any(k in question.lower() for k in [
+            "build my business fast", "7 day program", 
+            "guided build", "accountability", "how do I launch"
+        ]):
             sales_trigger = "ignite"
-        elif any(k in question.lower() for k in ["done for me", "set it up for me", "build it all", "just want it working"]):
+        elif any(k in question.lower() for k in [
+            "done for me", "set it up for me", 
+            "build it all", "just want it working"
+        ]):
             sales_trigger = "sovereign"
-
-
-        missing = check_missing_memory(memory)
-                if missing:
-            ask_back_note = f"By the way, I’d love to know your {', '.join(missing)}. You can tell me by saying things like 'My goal is...' or 'My name is...'"
 
         context_intro = (
             f"User Name: {memory['personal'].get('name', '')}\n"
@@ -105,10 +99,10 @@ def ask():
             f"Target Income: {memory['business'].get('income_target', '')}\n"
             f"Voice Style: {memory['preferences'].get('voice_style', '')}\n"
             f"Theme Color: {memory['preferences'].get('theme_color', '')}\n"
-            f"Recent Mood: {memory['emotional'].get('recent_state', '')}, Motivation Level: {memory['emotional'].get('motivation_level', 0)}"
+            f"Recent Mood: {memory['emotional'].get('recent_state', '')}, "
+            f"Motivation Level: {memory['emotional'].get('motivation_level', 0)}"
         )
 
-        
         if "what are my milestones" in question.lower():
             timeline = memory.get("timeline", [])
             if timeline:
@@ -118,7 +112,6 @@ def ask():
                 return jsonify({"reply": "You don't have any milestones recorded yet. You can say: mark today as 'Got my first sale'."})
 
         conversation = [
-        
             {"role": "system", "content": "You are Lumina, a soulful AI guide that adapts to the user's evolving journey."},
             {"role": "system", "content": f"User memory context: {context_intro}"},
             {"role": "user", "content": question}
@@ -130,10 +123,6 @@ def ask():
         )
 
         answer = response.choices[0].message.content.strip()
-
-        if ask_back_note:
-            answer += "\n\n" + ask_back_note
-
         return jsonify({"reply": answer, "cta": sales_trigger})
     except Exception as e:
         return jsonify({"reply": f"Error: {str(e)}"})
@@ -153,7 +142,9 @@ def speak():
             ssml_gender=texttospeech.SsmlVoiceGender.FEMALE
         )
         audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
-        response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
+        response = tts_client.synthesize_speech(
+            input=synthesis_input, voice=voice, audio_config=audio_config
+        )
 
         filename = f"static/audio_{uuid.uuid4().hex}.mp3"
         with open(filename, "wb") as out:
@@ -163,15 +154,10 @@ def speak():
     except Exception as e:
         return jsonify({"audio": "", "error": str(e)})
 
-if __name__ == "__main__":
-    app.run(debug=True)
-
-
 @app.route("/timeline")
 def timeline():
     memory = load_memory()
     return jsonify({"timeline": memory.get("timeline", [])})
-
 
 @app.route("/memory")
 def memory_view():
@@ -187,15 +173,4 @@ def update_memory():
     memory["business"]["income_target"] = data.get("income_target", "")
     memory["emotional"]["recent_state"] = data.get("mood", "")
     save_memory(memory)
-
-
-        # Detect sales intent and suggest products
-        sales_trigger = ""
-        if any(k in question.lower() for k in ["start a business", "build a brand", "get more clients", "create content", "automate", "get leads"]):
-            sales_trigger = "spark"
-        elif any(k in question.lower() for k in ["build my business fast", "7 day program", "guided build", "accountability", "how do I launch"]):
-            sales_trigger = "ignite"
-        elif any(k in question.lower() for k in ["done for me", "set it up for me", "build it all", "just want it working"]):
-            sales_trigger = "sovereign"
-
     return jsonify({"status": "success"})
