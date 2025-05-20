@@ -76,6 +76,7 @@ def ask():
     try:
         memory = load_memory()
         memory = update_memory_from_text(question, memory)
+        memory = update_timeline_from_text(question, memory)
         save_memory(memory)
 
         sales_trigger = ""
