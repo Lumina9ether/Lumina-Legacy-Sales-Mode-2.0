@@ -48,40 +48,44 @@ stopButton.addEventListener("click", () => {
 });
 
 const heyLuminaBtn = document.getElementById("hey-lumina-button");
-heyLuminaBtn.addEventListener("click", () => {
-    speak("Welcome to Lumina Legacy. I am your AI assistant.");
-});
+if (heyLuminaBtn) {
+    heyLuminaBtn.addEventListener("click", () => {
+        speak("Welcome to Lumina Legacy. I am your AI assistant.");
+    });
+}
 
 const askButton = document.getElementById("ask-lumina");
 const userInput = document.getElementById("user-input");
 
-askButton.addEventListener("click", async () => {
-    const question = userInput.value.trim();
-    if (question.length > 0) {
-        try {
-            const response = await fetch("/ask", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ question }),
-            });
-            const data = await response.json();
-            if (data.reply) {
-                speak(data.reply);
-                showCTA(data.cta);
+if (askButton && userInput) {
+    askButton.addEventListener("click", async () => {
+        const question = userInput.value.trim();
+        if (question.length > 0) {
+            try {
+                const response = await fetch("/ask", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ question }),
+                });
+                const data = await response.json();
+                if (data.reply) {
+                    speak(data.reply);
+                    showCTA(data.cta);
+                }
+            } catch (err) {
+                console.error("Error:", err);
             }
-        } catch (err) {
-            console.error("Error:", err);
+            userInput.value = "";
         }
-        userInput.value = "";
-    }
-});
+    });
 
-userInput.addEventListener("keypress", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        askButton.click();
-    }
-});
+    userInput.addEventListener("keypress", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            askButton.click();
+        }
+    });
+}
 
 async function loadMilestones() {
     const res = await fetch("/timeline");
@@ -106,29 +110,32 @@ async function loadMemoryForm() {
     }
 }
 
-document.getElementById("memory-form").onsubmit = async function (e) {
-    e.preventDefault();
-    const body = {
-        name: this.name.value,
-        goal: this.goal.value,
-        voice_style: this.voice_style.value,
-        income_target: this.income_target.value,
-        mood: this.mood.value
+const memoryForm = document.getElementById("memory-form");
+if (memoryForm) {
+    memoryForm.onsubmit = async function (e) {
+        e.preventDefault();
+        const body = {
+            name: this.name.value,
+            goal: this.goal.value,
+            voice_style: this.voice_style.value,
+            income_target: this.income_target.value,
+            mood: this.mood.value
+        };
+        await fetch("/update-memory", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+        });
+        alert("✅ Memory updated!");
     };
-    await fetch("/update-memory", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-    });
-    alert("✅ Memory updated!");
-};
+}
 
 window.onload = () => {
     loadMilestones?.();
     loadMemoryForm?.();
 };
 
-// CTA Button Logic + Modal Email Capture
+// 💡 CTA Button Logic
 const ctaButton = document.createElement("button");
 ctaButton.id = "cta-button";
 ctaButton.style.display = "none";
@@ -140,4 +147,24 @@ ctaButton.style.background = "#8F00FF";
 ctaButton.style.color = "#fff";
 ctaButton.style.fontSize = "16px";
 ctaButton.style.cursor = "pointer";
-subtitleBox.parent
+subtitleBox?.parentNode?.appendChild(ctaButton);
+
+function showCTA(tier) {
+    let text = "", url = "";
+    if (tier === "spark") {
+        text = "Get Started with Lumina Spark ($297)";
+        url = "https://buy.stripe.com/test_00wfZacRcgHV1SA0W2awo00";
+    } else if (tier === "ignite") {
+        text = "Book Lumina Ignite ($997)";
+        url = "https://buy.stripe.com/test_cNi7sE3gC1N1eFm6gmawo01";
+    } else if (tier === "sovereign") {
+        text = "Launch with Lumina Sovereign ($2222)";
+        url = "https://buy.stripe.com/test_eVqeV68AWgHV0OwcEKawo02";
+    } else {
+        ctaButton.style.display = "none";
+        return;
+    }
+    ctaButton.textContent = text;
+    ctaButton.onclick = () => window.open(url, "_blank");
+    ctaButton.style.display = "inline-block";
+}
